@@ -1,75 +1,97 @@
-using System;
-using Autofac;
+using Microsoft.AspNetCore.Mvc;
 
-namespace AutofacExample
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddControllers();
+
+// Dependency Injection Lifetimes
+builder.Services.AddTransient<ITransientGuidService, TransientGuidService>();
+builder.Services.AddScoped<IScopedGuidService, ScopedGuidService>();
+builder.Services.AddSingleton<ISingletonGuidService, SingletonGuidService>();
+
+var app = builder.Build();
+
+app.MapControllers();
+
+app.Run();
+
+
+// Interfaces
+public interface ITransientGuidService
 {
-    public interface INotificationService
+    string GetGuid();
+}
+
+public interface IScopedGuidService
+{
+    string GetGuid();
+}
+
+public interface ISingletonGuidService
+{
+    string GetGuid();
+}
+
+
+// Implementations
+public class TransientGuidService : ITransientGuidService
+{
+    private readonly Guid _id = Guid.NewGuid();
+
+    public string GetGuid()
     {
-        void NotifyUserNameChanged(string newName);
+        return _id.ToString();
+    }
+}
+
+public class ScopedGuidService : IScopedGuidService
+{
+    private readonly Guid _id = Guid.NewGuid();
+
+    public string GetGuid()
+    {
+        return _id.ToString();
+    }
+}
+
+public class SingletonGuidService : ISingletonGuidService
+{
+    private readonly Guid _id = Guid.NewGuid();
+
+    public string GetGuid()
+    {
+        return _id.ToString();
+    }
+}
+
+
+// Controller
+[ApiController]
+[Route("[controller]")]
+public class HomeController : ControllerBase
+{
+    private readonly ITransientGuidService _transient;
+    private readonly IScopedGuidService _scoped;
+    private readonly ISingletonGuidService _singleton;
+
+    public HomeController(
+        ITransientGuidService transient,
+        IScopedGuidService scoped,
+        ISingletonGuidService singleton)
+    {
+        _transient = transient;
+        _scoped = scoped;
+        _singleton = singleton;
     }
 
-    public class ConsoleNotification : INotificationService
+    [HttpGet]
+    public IActionResult Index()
     {
-        public void NotifyUserNameChanged(string newName)
-        {
-            Console.WriteLine($"User name changed to: {newName}");
-        }
-    }
+        var message =
+            $"Transient : {_transient.GetGuid()}\n" +
+            $"Scoped    : {_scoped.GetGuid()}\n" +
+            $"Singleton : {_singleton.GetGuid()}";
 
-    public class User
-    {
-        public string UserName { get; set; } = "";
-    }
-
-    public class UserService
-    {
-        private readonly INotificationService _notificationService;
-
-        public UserService(INotificationService notificationService)
-        {
-            _notificationService = notificationService;
-        }
-
-        public void ChangeUserName(User user, string newName)
-        {
-            user.UserName = newName;
-            _notificationService.NotifyUserNameChanged(newName);
-        }
-    }
-
-    public class ProgramModule : Module
-    {
-        protected override void Load(ContainerBuilder builder)
-        {
-            builder.RegisterType<ConsoleNotification>()
-                   .As<INotificationService>();
-
-            builder.RegisterType<UserService>();
-        }
-    }
-
-    internal class Program
-    {
-        static void Main(string[] args)
-        {
-            var builder = new ContainerBuilder();
-
-            builder.RegisterModule<ProgramModule>();
-
-            var container = builder.Build();
-
-            using var scope = container.BeginLifetimeScope();
-
-            var userService = scope.Resolve<UserService>();
-
-            var user = new User
-            {
-                UserName = "InitialName"
-            };
-
-            userService.ChangeUserName(user, "NewName");
-
-            Console.ReadLine();
-        }
+        return Ok(message);
     }
 }
